@@ -64,7 +64,7 @@ public struct UserInfo
 
 public struct RngData 
 {
-	public object seed;
+	public int seed;
 }
 
 public struct Request {
