@@ -6,7 +6,12 @@ public enum ReceivingMessageType
 	StartMatchmaking,
 	LoadingFinished,
 	RouteStageFinished,
-	RunFinished
+	RunFinished,
+	LeftToMenu,
+	RngSeed,
+	// afraid to implement right now
+	// tired lol
+	//CancelMatchmaking
 }
 
 public enum SendingMessageType 
@@ -15,5 +20,8 @@ public enum SendingMessageType
 	MatchFound,
 	StartRun,
 	PlayerFinishedStage,
-	RunStopped
+	RunStopped,
+	OtherPlayerForfeit,
+	RequestSeed,
+	RngSeedSet
 }

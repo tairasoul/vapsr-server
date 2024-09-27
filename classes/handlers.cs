@@ -47,4 +47,30 @@ public class Handlers
 		player.runFinished = true;
 		player.time = info.time;
 	}
+	
+	[MessageHandler(ReceivingMessageType.LeftToMenu)]
+	public static void PlayerLeft(ref Player player, string data) 
+	{
+		Player player2 = player.upAgainst;
+		player.upAgainst = null;
+		player2.upAgainst = null;
+		player.isInGame = false;
+		player.isLoaded = false;
+		player2.isInGame = false;
+		player2.isLoaded = false;
+		player.runFinished = false;
+		player2.runFinished = false;
+		player.runStarted = false;
+		player2.runStarted = false;
+		player.time = 0f;
+		player2.time = 0f;
+		player.upAgainst.SendResponse(new(SendingMessageType.OtherPlayerForfeit, new MatchFoundResult() { playerName = player.name }));
+	}
+	
+	[MessageHandler(ReceivingMessageType.RngSeed)]
+	public static void RngSeed(ref Player player, string data) 
+	{
+		RngData rng = JsonConvert.DeserializeObject<RngData>(data);
+		player.upAgainst.SendResponse(new Response(SendingMessageType.RngSeedSet, rng));
+	}
 }
