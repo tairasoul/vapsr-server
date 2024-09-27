@@ -21,7 +21,14 @@ public class Matchmaker
 		player1.upAgainst = player2;
 		player2.upAgainst = player1;
 		player1.SendResponse(response1);
+		SeedRequest(player1);
 		player2.SendResponse(response2);
+	}
+	
+	private static async Task SeedRequest(Player player1) 
+	{
+		await Task.Delay(2000);
+		player1.SendResponse(new(SendingMessageType.RequestSeed));
 	}
 	
 	public static async Task MatchDoneLoop() 
@@ -66,6 +73,8 @@ public class Matchmaker
 			player2.isLoaded = false;
 			player1.runFinished = false;
 			player2.runFinished = false;
+			player1.runStarted = false;
+			player2.runStarted = false;
 			player1.time = 0f;
 			player2.time = 0f;
 			player1.SendResponse(new Response(SendingMessageType.RunStopped, info1));

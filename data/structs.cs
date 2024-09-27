@@ -62,6 +62,11 @@ public struct UserInfo
 	//public string id;
 }
 
+public struct RngData 
+{
+	public object seed;
+}
+
 public struct Request {
 	public string type;
 	public string? data;
