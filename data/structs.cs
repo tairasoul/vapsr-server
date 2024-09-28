@@ -1,8 +1,10 @@
 using System.Reflection;
 using Newtonsoft.Json;
 using TcpSharp;
-
+using MessagePack;
 namespace VapSRServer;
+
+public interface RequestData {};
 
 public class Player 
 {
@@ -18,7 +20,7 @@ public class Player
 	public Player upAgainst;
 	public void SendResponse(Response response) 
 	{
-		client.SendString(response.ToJson());
+		client.SendBytes(response.Bytes());
 	}
 }
 
@@ -28,52 +30,73 @@ public struct HandlerClassInfo
 	public MessageHandler attribute;
 }
 
-public struct MatchFoundResult 
+[MessagePackObject(true)]
+public class MatchFoundResult 
 {
+	public MatchFoundResult() { }
 	public string playerName;
 }
 
-public struct PlayerCompletedStage 
+[MessagePackObject(true)]
+public class PlayerCompletedStage 
 {
+	public PlayerCompletedStage() { }
 	public string playerName;
 	public string stage;
 }
 
-public struct PlayerCompletedStageInfo 
+[MessagePackObject(true)]
+public class PlayerCompletedStageInfo 
 {
+	public PlayerCompletedStageInfo() { }
 	public string stage;
 }
 
-public struct RunFinishedInfo 
+[MessagePackObject(true)]
+public class RunFinishedInfo 
 {
+	public RunFinishedInfo() { }
 	public float time;
 }
 
-public struct RunFinishedRelayInfo 
+[MessagePackObject(true)]
+public class RunFinishedRelayInfo 
 {
+	public RunFinishedRelayInfo() { }
 	public string playerName;
 	public float time;
 	public bool youWon;
 }
 
-public struct UserInfo 
+[MessagePackObject(true)]
+public class UserInfo 
 {
+	public UserInfo() { }
 	public string username;
+	//[Key(1)]
 	//public string id;
 }
 
-public struct RngData 
+[MessagePackObject(true)]
+public class RngData 
 {
+	public RngData() { }
 	public int seed;
 }
 
-public struct Request {
+[MessagePackObject(true)]
+public class Request 
+{
+	public Request() { }
 	public string type;
-	public string? data;
+	public object? data;
 }
 
-public struct Response 
+[MessagePackObject(true)]
+public class Response 
 {
+	
+	public Response() { }
 	public Response(SendingMessageType sendType, object? body) 
 	{
 		type = sendType.ToString();
@@ -86,13 +109,14 @@ public struct Response
 	public string type;
 	public object? data;
 	
-	public string ToJson() 
+	public byte[] Bytes() 
 	{
-		return $"{{\"type\":\"{type}\",\"data\":{JsonConvert.ToString(JsonConvert.SerializeObject(data))}}}";
+		return MessagePackSerializer.Serialize(this);
 	}
 }
 
-public struct RunConfigInfo 
+[MessagePackObject(true)]
+public class RunConfigInfo 
 {
 	public string fileName;
 	public string path;

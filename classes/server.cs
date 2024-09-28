@@ -1,6 +1,8 @@
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using MessagePack;
+using MessagePack.Formatters;
 using Newtonsoft.Json;
 using TcpSharp;
 
@@ -17,8 +19,9 @@ public class ServerHandler
 		server = new(port) 
 		{
 			KeepAlive = true,
-			KeepAliveInterval = 1,
-			KeepAliveRetryCount = 5
+			KeepAliveTime = 5000,
+			KeepAliveInterval = 200,
+			KeepAliveRetryCount = 6
 		};
 		GrabHandlers();
 		Task.Run(Matchmaker.MatchmakingLoop);
@@ -52,16 +55,20 @@ public class ServerHandler
 		
 		server.OnDataReceived += (object sender, OnServerDataReceivedEventArgs args) =>
 		{
-			Console.WriteLine($"Player sent data, uuid {args.ConnectionId}");
-			string data = Encoding.UTF8.GetString(args.Data);
-			Console.WriteLine($"Data: {data}");
 			string uuid = args.ConnectionId;
-			HandleData(uuid, data);
+			Player? player = PlayerPool.players.FirstOrDefault((v) => v.UUID == uuid);
+			Console.WriteLine($"Player sent data, username {player?.name} uuid {uuid}");
+			Request dataS = MessagePackSerializer.Deserialize<Request>(args.Data);
+			string data = JsonConvert.SerializeObject(dataS);
+			Console.WriteLine($"Data: {data}");
+			HandleData(uuid, args.Data);
 		};
 		
 		server.OnError += (object sender, OnServerErrorEventArgs args) => 
 		{
-			Console.Error.WriteLine(args.Exception);
+			Console.Error.WriteLine(args.Exception.Source);
+			Console.Error.WriteLine(args.Exception.Message);
+			Console.Error.WriteLine(args.Exception.StackTrace);
 		};
 		
 		server.StartListening();
@@ -90,9 +97,16 @@ public class ServerHandler
 		}
 	}
 	
-	private void HandleData(string uuid, string data) 
+	private void HandleData(string uuid, byte[] data) 
 	{
-		Request request = JsonConvert.DeserializeObject<Request>(data);
+		MessagePackSerializerOptions opts = MessagePackSerializerOptions.Standard.WithResolver(
+			MessagePack.Resolvers.CompositeResolver.Create(
+				new IMessagePackFormatter[] { new RequestFormatter() },
+				new[] { MessagePack.Resolvers.StandardResolver.Instance }
+			)
+		).WithCompression(MessagePackCompression.Lz4Block);
+		//MessagePackSerializerOptions opts = MessagePackSerializerOptions.Standard.WithCompression(MessagePackCompression.Lz4Block);
+		Request request = MessagePackSerializer.Deserialize<Request>(data, opts);
 		Console.WriteLine($"Request type: {request.type}");
 		foreach (HandlerClassInfo classInfo in info) 
 		{
@@ -101,6 +115,10 @@ public class ServerHandler
 				Player player = PlayerPool.players.First((v) => v.UUID == uuid);
 				classInfo.handler.Invoke(null, [player, request.data]);
 				break;
+			}
+			if (request.type == "Disconnect") 
+			{
+				server.Disconnect(uuid);
 			}
 		}
 	}

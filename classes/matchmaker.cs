@@ -126,6 +126,7 @@ public class Matchmaker
 			if (playersMatchmaking.Length > 1) 
 			{
 				Player[] players = playersMatchmaking.OrderBy(x => Random.Shared.Next()).Take(2).ToArray();
+				Console.WriteLine(players[0].name, players[1].name);
 				MatchFound(ref players[0], ref players[1]);
 			}
 		}

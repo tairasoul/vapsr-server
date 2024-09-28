@@ -9,6 +9,7 @@ public enum ReceivingMessageType
 	RunFinished,
 	LeftToMenu,
 	RngSeed,
+	Disconnect
 	// afraid to implement right now
 	// tired lol
 	//CancelMatchmaking
