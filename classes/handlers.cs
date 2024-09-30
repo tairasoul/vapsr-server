@@ -5,14 +5,14 @@ using VapSRServer;
 public class Handlers 
 {
 	[MessageHandler(ReceivingMessageType.LoadingFinished)]
-	public static void LoadingFinished(ref Player player, object? data) 
+	public static void LoadingFinished(ref Player player, object data) 
 	{
 		Console.WriteLine($"Player uuid {player.UUID} finished loading.");
 		player.isLoaded = true;
 	}
 	
 	[MessageHandler(ReceivingMessageType.StartMatchmaking)]
-	public static void StartMatchmaking(ref Player player, object? data) 
+	public static void StartMatchmaking(ref Player player, object data) 
 	{
 		player.matchmaking = true;
 		Response response = new(SendingMessageType.MatchmakingStarted);
@@ -72,6 +72,58 @@ public class Handlers
 		player2.time = 0f;
 		player2.SendResponse(new(SendingMessageType.OtherPlayerForfeit, new MatchFoundResult() { playerName = player.name }));
 	}
+	
+	[MessageHandler(ReceivingMessageType.CancelMatchmaking)]
+	public static void CancelMatchmaking(ref Player player, object data) 
+	{
+		player.matchmaking = false;
+	}
+	
+	[MessageHandler(ReceivingMessageType.CreatePrivateRoom)]
+	public static void CreatePrivateRoom(ref Player player, object data) 
+	{
+		PrivateRoom createdRoom = Rooms.CreateRoom(ref player);
+		RoomData creation = new() 
+		{
+			code = createdRoom.code
+		};
+		player.room = createdRoom;
+		player.SendResponse(new(SendingMessageType.PrivateRoomCreated, creation));
+	}
+	
+	[MessageHandler(ReceivingMessageType.JoinPrivateRoom)]
+	public static void JoinPrivateRoom(ref Player player, object data) 
+	{
+		RoomData roomData = (RoomData)data;
+		if (Rooms.RoomCodeExists(roomData.code)) 
+		{
+			PrivateRoom room = Rooms.GetRoom(roomData.code);
+			room.player2 = player;
+			player.room = room;
+			RoomReplicationData replicationData = new() 
+			{
+				player1Name = room.player1.name,
+				player2Name = room.player2.name
+			};
+			room.player1.SendResponse(new Response(SendingMessageType.ReplicateRoomData, replicationData));
+			player.SendResponse(new Response(SendingMessageType.PrivateRoomJoinAttempt, new RoomJoinAttempt() { RoomJoined = true, replicationData = replicationData }));
+		}
+		else 
+		{
+			player.SendResponse(new Response(SendingMessageType.PrivateRoomJoinAttempt, new RoomJoinAttempt() { RoomJoined = false }));
+		}
+	}
+	
+	[MessageHandler(ReceivingMessageType.PrivateRoomStart)]
+	public static void StartPrivateRoom(ref Player player, object data) 
+	{
+		PrivateRoom room = player.room;
+		if (room.player2 == null)
+			return;
+		room.player1.SendResponse(new Response(SendingMessageType.PrivateRoomStarted));
+		room.player2.SendResponse(new Response(SendingMessageType.PrivateRoomStarted));
+	}
+	
 	
 	[MessageHandler(ReceivingMessageType.RngSeed)]
 	public static void RngSeed(ref Player player, object data) 

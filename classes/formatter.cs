@@ -27,6 +27,9 @@ public class RequestFormatter : IMessagePackFormatter<Request>
 			case "RunFinished":
 				request.data = MessagePackSerializer.Deserialize<RunFinishedInfo>(ref reader, options);
 				break;
+			case "JoinPrivateRoom":
+				request.data = MessagePackSerializer.Deserialize<RoomData>(ref reader, options);
+				break;
 			default:
 				request.data = null;
 				break;
