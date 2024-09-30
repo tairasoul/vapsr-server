@@ -9,10 +9,11 @@ public enum ReceivingMessageType
 	RunFinished,
 	LeftToMenu,
 	RngSeed,
-	Disconnect
-	// afraid to implement right now
-	// tired lol
-	//CancelMatchmaking
+	Disconnect,
+	CreatePrivateRoom,
+	JoinPrivateRoom,
+	PrivateRoomStart,
+	CancelMatchmaking
 }
 
 public enum SendingMessageType 
@@ -24,5 +25,9 @@ public enum SendingMessageType
 	RunStopped,
 	OtherPlayerForfeit,
 	RequestSeed,
-	RngSeedSet
+	RngSeedSet,
+	PrivateRoomCreated,
+	PrivateRoomStarted,
+	PrivateRoomJoinAttempt,
+	ReplicateRoomData
 }

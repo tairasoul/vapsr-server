@@ -120,7 +120,7 @@ public class Matchmaker
 			Player[] playersMatchmaking = [];
 			foreach (Player player in PlayerPool.players) 
 			{
-				if (player.matchmaking)
+				if (player.matchmaking && DateTimeOffset.UtcNow.ToUnixTimeSeconds() - player.lastResponseTime < 5)
 					playersMatchmaking = [ .. playersMatchmaking, player ];
 			}
 			if (playersMatchmaking.Length > 1) 

@@ -4,13 +4,14 @@ using TcpSharp;
 using MessagePack;
 namespace VapSRServer;
 
-public interface RequestData {};
-
 public class Player 
 {
 	public ConnectedClient client;
 	public string UUID;
 	public string name;
+	public PrivateRoom room;
+	public long lastResponseTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+	public bool inRoom;
 	public bool isInGame;
 	public bool runStarted;
 	public bool runFinished;
@@ -22,6 +23,13 @@ public class Player
 	{
 		client.SendBytes(response.Bytes());
 	}
+}
+
+public class PrivateRoom 
+{
+	public Player player1;
+	public Player player2;
+	public string code;
 }
 
 public struct HandlerClassInfo 
@@ -116,8 +124,32 @@ public class Response
 }
 
 [MessagePackObject(true)]
+public class RoomData 
+{
+	public RoomData() {}
+	public string code;
+}
+
+[MessagePackObject(true)]
+public class RoomReplicationData 
+{
+	public RoomReplicationData() {}
+	public string player1Name;
+	public string player2Name;
+}
+
+[MessagePackObject(true)]
+public class RoomJoinAttempt 
+{
+	public RoomJoinAttempt() {}
+	public bool RoomJoined;
+	public RoomReplicationData? replicationData;
+}
+
+[MessagePackObject(true)]
 public class RunConfigInfo 
 {
+	public RunConfigInfo() {}
 	public string fileName;
 	public string path;
 	public string json;

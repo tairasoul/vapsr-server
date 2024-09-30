@@ -16,21 +16,52 @@ public class ServerHandler
 	
 	public ServerHandler(int port) 
 	{
-		server = new(port) 
-		{
-			KeepAlive = true,
-			KeepAliveTime = 5000,
-			KeepAliveInterval = 200,
-			KeepAliveRetryCount = 6
-		};
+		server = new(port);
 		GrabHandlers();
 		Task.Run(Matchmaker.MatchmakingLoop);
 		Task.Run(Matchmaker.ReadyLoop);
 		Task.Run(Matchmaker.MatchDoneLoop);
 	}
 	
+	private static async Task KeepAlive(ConnectedClient client) 
+	{
+		await Task.Delay(2000);
+		client.SendString("k");
+	}
+	
+	private async Task KeepAliveOperations() 
+	{
+		while (true) 
+		{
+			await Task.Delay(500);
+			foreach (Player player in PlayerPool.players) 
+				KeepAlive(player.client);
+			await Task.Run(PruneDeadClients);
+		}
+	}
+	
+	private async Task PruneDeadClients() 
+	{
+		await Task.Delay(1700);
+		foreach (Player player in PlayerPool.players) 
+		{
+			long lastResponseTime = player.lastResponseTime;
+			if (DateTimeOffset.UtcNow.ToUnixTimeSeconds() - lastResponseTime > 10) 
+			{
+				Console.WriteLine($"Player {player.name} is likely disconnected. Disconnecting their socket connection.");
+				if (player.upAgainst != null) 
+				{
+					Console.WriteLine($"Telling {player.name}'s opponent they have forfeited.");
+					player.upAgainst.SendResponse(new(SendingMessageType.OtherPlayerForfeit, new MatchFoundResult() { playerName = player.name }));
+				}
+				server.Disconnect(player.UUID);
+			}
+		}
+	}
+	
 	public async Task Start() 
 	{
+		Task.Run(KeepAliveOperations);
 		server.OnConnected += (object sender, OnServerConnectedEventArgs args) =>
 		{
 			Player player = new() 
@@ -40,6 +71,7 @@ public class ServerHandler
 				runStarted = false,
 				matchmaking = false,
 				runFinished = false,
+				inRoom = false,
 				UUID = args.ConnectionId,
 				client = server.GetClient(args.ConnectionId)
 			};
@@ -57,6 +89,10 @@ public class ServerHandler
 		{
 			string uuid = args.ConnectionId;
 			Player? player = PlayerPool.players.FirstOrDefault((v) => v.UUID == uuid);
+			if (player != null)
+				player.lastResponseTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+			if (Encoding.UTF8.GetString(args.Data) == "k")
+				return;
 			Console.WriteLine($"Player sent data, username {player?.name} uuid {uuid}");
 			Request dataS = MessagePackSerializer.Deserialize<Request>(args.Data);
 			string data = JsonConvert.SerializeObject(dataS);
@@ -69,6 +105,9 @@ public class ServerHandler
 			Console.Error.WriteLine(args.Exception.Source);
 			Console.Error.WriteLine(args.Exception.Message);
 			Console.Error.WriteLine(args.Exception.StackTrace);
+			Console.Error.WriteLine(args.Exception.InnerException.Source);
+			Console.Error.WriteLine(args.Exception.InnerException.Message);
+			Console.Error.WriteLine(args.Exception.InnerException.StackTrace);
 		};
 		
 		server.StartListening();
