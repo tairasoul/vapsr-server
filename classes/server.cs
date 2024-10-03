@@ -147,17 +147,18 @@ public class ServerHandler
 		//MessagePackSerializerOptions opts = MessagePackSerializerOptions.Standard.WithCompression(MessagePackCompression.Lz4Block);
 		Request request = MessagePackSerializer.Deserialize<Request>(data, opts);
 		Console.WriteLine($"Request type: {request.type}");
+		if (request.type == "Disconnect") 
+		{
+			server.Disconnect(uuid);
+			return;
+		}
 		foreach (HandlerClassInfo classInfo in info) 
 		{
 			if (classInfo.attribute.type.ToString() == request.type) 
 			{
 				Player player = PlayerPool.players.First((v) => v.UUID == uuid);
 				classInfo.handler.Invoke(null, [player, request.data]);
-				break;
-			}
-			if (request.type == "Disconnect") 
-			{
-				server.Disconnect(uuid);
+				return;
 			}
 		}
 	}

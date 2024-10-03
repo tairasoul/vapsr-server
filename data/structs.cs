@@ -81,7 +81,6 @@ public class UserInfo
 {
 	public UserInfo() { }
 	public string username;
-	//[Key(1)]
 	//public string id;
 }
 
@@ -134,8 +133,9 @@ public class RoomData
 public class RoomReplicationData 
 {
 	public RoomReplicationData() {}
-	public string player1Name;
-	public string player2Name;
+	public string localPlayerName;
+	public string opponentName;
+	public string code;
 }
 
 [MessagePackObject(true)]

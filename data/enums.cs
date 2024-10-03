@@ -13,7 +13,8 @@ public enum ReceivingMessageType
 	CreatePrivateRoom,
 	JoinPrivateRoom,
 	PrivateRoomStart,
-	CancelMatchmaking
+	CancelMatchmaking,
+	LeavePrivateRoom
 }
 
 public enum SendingMessageType 
