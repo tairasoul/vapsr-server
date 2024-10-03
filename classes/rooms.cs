@@ -2,12 +2,17 @@ namespace VapSRServer;
 
 public static class Rooms 
 {
-	private static Random random = new Random();
+	private static Random random = new();
 	private const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 	public static PrivateRoom[] rooms = [];
 	public static bool RoomCodeExists(string code) 
 	{
 		return GetRoom(code) != null;
+	}
+	
+	public static void RemoveRoom(string code) 
+	{
+		rooms = rooms.Where((room) => room.code != code).ToArray();
 	}
 	
 	public static PrivateRoom GetRoom(string code) 
@@ -34,7 +39,7 @@ public static class Rooms
 	
 	private static string GenerateCode() 
 	{
-		string code = new string(Enumerable.Repeat(chars, 6)
+		string code = new(Enumerable.Repeat(chars, 6)
 			.Select(s => s[random.Next(s.Length)]).ToArray());
 		if (RoomCodeExists(code))
 			return GenerateCode();

@@ -82,11 +82,14 @@ public class Handlers
 	[MessageHandler(ReceivingMessageType.CreatePrivateRoom)]
 	public static void CreatePrivateRoom(ref Player player, object data) 
 	{
+		if (player.inRoom)
+			return;
 		PrivateRoom createdRoom = Rooms.CreateRoom(ref player);
 		RoomData creation = new() 
 		{
 			code = createdRoom.code
 		};
+		player.inRoom = true;
 		player.room = createdRoom;
 		player.SendResponse(new(SendingMessageType.PrivateRoomCreated, creation));
 	}
@@ -94,19 +97,29 @@ public class Handlers
 	[MessageHandler(ReceivingMessageType.JoinPrivateRoom)]
 	public static void JoinPrivateRoom(ref Player player, object data) 
 	{
+		if (player.inRoom)
+			return;
 		RoomData roomData = (RoomData)data;
+		player.inRoom = true;
 		if (Rooms.RoomCodeExists(roomData.code)) 
 		{
 			PrivateRoom room = Rooms.GetRoom(roomData.code);
 			room.player2 = player;
 			player.room = room;
-			RoomReplicationData replicationData = new() 
+			RoomReplicationData replicationData1 = new() 
 			{
-				player1Name = room.player1.name,
-				player2Name = room.player2.name
+				localPlayerName = room.player1.name,
+				opponentName = room.player2.name,
+				code = roomData.code
 			};
-			room.player1.SendResponse(new Response(SendingMessageType.ReplicateRoomData, replicationData));
-			player.SendResponse(new Response(SendingMessageType.PrivateRoomJoinAttempt, new RoomJoinAttempt() { RoomJoined = true, replicationData = replicationData }));
+			RoomReplicationData replicationData2 = new() 
+			{
+				opponentName = room.player1.name,
+				localPlayerName = room.player2.name,
+				code = roomData.code
+			};
+			room.player1.SendResponse(new Response(SendingMessageType.ReplicateRoomData, replicationData1));
+			player.SendResponse(new Response(SendingMessageType.PrivateRoomJoinAttempt, new RoomJoinAttempt() { RoomJoined = true, replicationData = replicationData2 }));
 		}
 		else 
 		{
@@ -117,13 +130,35 @@ public class Handlers
 	[MessageHandler(ReceivingMessageType.PrivateRoomStart)]
 	public static void StartPrivateRoom(ref Player player, object data) 
 	{
+		if (!player.inRoom)
+			return;
 		PrivateRoom room = player.room;
 		if (room.player2 == null)
 			return;
+		room.player1.upAgainst = room.player2;
+		room.player2.upAgainst = room.player1;
+		room.player1.isInGame = true;
+		room.player2.isInGame = true;
 		room.player1.SendResponse(new Response(SendingMessageType.PrivateRoomStarted));
 		room.player2.SendResponse(new Response(SendingMessageType.PrivateRoomStarted));
 	}
 	
+	[MessageHandler(ReceivingMessageType.LeavePrivateRoom)]
+	public static void LeavePrivateRoom(ref Player player, object data) 
+	{
+		if (!player.inRoom)
+			return;
+		if (player.room.player1 == player)
+			if (player.room.player2 != null)
+				player.room.player2.SendResponse(new Response(SendingMessageType.ReplicateRoomData, new RoomReplicationData() { localPlayerName = player.room.player2.name, opponentName = null, code = player.room.code }));
+			else
+				Rooms.RemoveRoom(player.room.code);
+		if (player.room.player2 == player)
+			if (player.room.player1 != null)
+				player.room.player1.SendResponse(new Response(SendingMessageType.ReplicateRoomData, new RoomReplicationData() { localPlayerName = player.room.player1.name, opponentName = null, code = player.room.code }));
+			else
+				Rooms.RemoveRoom(player.room.code);
+	}
 	
 	[MessageHandler(ReceivingMessageType.RngSeed)]
 	public static void RngSeed(ref Player player, object data) 
