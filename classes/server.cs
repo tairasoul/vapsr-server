@@ -1,9 +1,8 @@
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
-using MessagePack;
-using MessagePack.Formatters;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
+using ProtoBuf;
 using TcpSharp;
 
 namespace VapSRServer;
@@ -21,6 +20,7 @@ public class ServerHandler
 		Task.Run(Matchmaker.MatchmakingLoop);
 		Task.Run(Matchmaker.ReadyLoop);
 		Task.Run(Matchmaker.MatchDoneLoop);
+		Task.Run(Matchmaker.RoomReadyLoop);
 	}
 	
 	private static async Task KeepAlive(ConnectedClient client) 
@@ -40,6 +40,11 @@ public class ServerHandler
 		}
 	}
 	
+	private void Room_OpponentForfeit(PrivateRoom room, Player player) 
+	{
+		
+	}
+	
 	private async Task PruneDeadClients() 
 	{
 		await Task.Delay(1700);
@@ -48,11 +53,19 @@ public class ServerHandler
 			long lastResponseTime = player.lastResponseTime;
 			if (DateTimeOffset.UtcNow.ToUnixTimeSeconds() - lastResponseTime > 10) 
 			{
-				Console.WriteLine($"Player {player.name} is likely disconnected. Disconnecting their socket connection.");
+				Console.WriteLine($"Player {player.name} is likely disconnected (last response time is over 10 seconds ago). Disconnecting their socket connection.");
 				if (player.upAgainst != null) 
 				{
 					Console.WriteLine($"Telling {player.name}'s opponent they have forfeited.");
-					player.upAgainst.SendResponse(new(SendingMessageType.OtherPlayerForfeit, new MatchFoundResult() { playerName = player.name }));
+					player.upAgainst.SendResponse(SendingMessageType.OtherPlayerForfeit, new MatchFoundResult() { playerName = player.name });
+					server.Disconnect(player.UUID);
+					return;
+				}
+				if (player.inRoom) 
+				{
+					Console.WriteLine($"Telling {player.name}'s opponents they have forfeited.");
+					Room_OpponentForfeit(player.room, player);
+					return;
 				}
 				server.Disconnect(player.UUID);
 			}
@@ -94,8 +107,8 @@ public class ServerHandler
 			if (Encoding.UTF8.GetString(args.Data) == "k")
 				return;
 			Console.WriteLine($"Player sent data, username {player?.name} uuid {uuid}");
-			Request dataS = MessagePackSerializer.Deserialize<Request>(args.Data);
-			string data = JsonConvert.SerializeObject(dataS);
+			Request dataS = Serializer.Deserialize<Request>(args.Data.AsMemory());
+			string data = JsonSerializer.Serialize(dataS);
 			Console.WriteLine($"Data: {data}");
 			HandleData(uuid, args.Data);
 		};
@@ -138,14 +151,14 @@ public class ServerHandler
 	
 	private void HandleData(string uuid, byte[] data) 
 	{
-		MessagePackSerializerOptions opts = MessagePackSerializerOptions.Standard.WithResolver(
+		/*MessagePackSerializerOptions opts = MessagePackSerializerOptions.Standard.WithResolver(
 			MessagePack.Resolvers.CompositeResolver.Create(
 				new IMessagePackFormatter[] { new RequestFormatter() },
 				new[] { MessagePack.Resolvers.StandardResolver.Instance }
 			)
-		).WithCompression(MessagePackCompression.Lz4Block);
+		).WithCompression(MessagePackCompression.Lz4Block);*/
 		//MessagePackSerializerOptions opts = MessagePackSerializerOptions.Standard.WithCompression(MessagePackCompression.Lz4Block);
-		Request request = MessagePackSerializer.Deserialize<Request>(data, opts);
+		Request request = Serializer.Deserialize<Request>(data.AsMemory());
 		Console.WriteLine($"Request type: {request.type}");
 		if (request.type == "Disconnect") 
 		{
@@ -158,7 +171,7 @@ public class ServerHandler
 			{
 				Player player = PlayerPool.players.First((v) => v.UUID == uuid);
 				classInfo.handler.Invoke(null, [player, request.data]);
-				return;
+				break;
 			}
 		}
 	}

@@ -28,7 +28,7 @@ public class Matchmaker
 	private static async Task SeedRequest(Player player1) 
 	{
 		await Task.Delay(2000);
-		player1.SendResponse(new(SendingMessageType.RequestSeed));
+		player1.SendResponse(SendingMessageType.RequestSeed);
 	}
 	
 	public static async Task MatchDoneLoop() 
@@ -39,7 +39,7 @@ public class Matchmaker
 			Player[] playersInGame = [];
 			foreach (Player player in PlayerPool.players) 
 			{
-				if (player.isLoaded && player.runStarted && playersInGame.FirstOrDefault((v) => v.UUID == player.upAgainst.UUID) == null)
+				if (!player.inRoom && player.isLoaded && player.runStarted && playersInGame.FirstOrDefault((v) => v.UUID == player.upAgainst.UUID) == null)
 					playersInGame = [ .. playersInGame, player ];
 			}
 			foreach (Player player in playersInGame) 
@@ -90,7 +90,7 @@ public class Matchmaker
 			Player[] playersInGame = [];
 			foreach (Player player in PlayerPool.players) 
 			{
-				if (player.isInGame && !player.runStarted && playersInGame.FirstOrDefault((v) => v.UUID == player.upAgainst.UUID) == null)
+				if (!player.inRoom && player.isInGame && !player.runStarted && playersInGame.FirstOrDefault((v) => v.UUID == player.upAgainst.UUID) == null)
 					playersInGame = [ .. playersInGame, player ];
 			}
 			foreach (Player player in playersInGame) 
@@ -120,15 +120,83 @@ public class Matchmaker
 			Player[] playersMatchmaking = [];
 			foreach (Player player in PlayerPool.players) 
 			{
-				if (player.matchmaking && DateTimeOffset.UtcNow.ToUnixTimeSeconds() - player.lastResponseTime < 5)
+				if (!player.inRoom && player.matchmaking && DateTimeOffset.UtcNow.ToUnixTimeSeconds() - player.lastResponseTime < 5)
 					playersMatchmaking = [ .. playersMatchmaking, player ];
 			}
 			if (playersMatchmaking.Length > 1) 
 			{
 				Player[] players = playersMatchmaking.OrderBy(x => Random.Shared.Next()).Take(2).ToArray();
-				Console.WriteLine(players[0].name, players[1].name);
 				MatchFound(ref players[0], ref players[1]);
 			}
+		}
+	}
+	
+	private static void ProcessRoom_Ready(PrivateRoom room) 
+	{
+		Player[] players = [ room.host, .. room.connected ];
+		bool allReady = players.All((v) => v.isLoaded);
+		bool Started = players.Any((v) => v.runStarted);
+		if (allReady && !Started) 
+			foreach (Player player in players) 
+			{
+				player.SendResponse(SendingMessageType.StartRun);
+				player.RunFinished += (object _, EventArgs _) => ProcessRoom_Finished(player);
+			}
+	}
+	
+	private static void ProcessRoom_Finished(Player player) 
+	{
+		player.ClearFinishedListeners();
+		PrivateRoom room = player.room;
+		Player[] players = [ room.host, .. room.connected ];
+		foreach (Player plr in players) 
+		{
+			if (plr.runFinished && plr.UUID != player.UUID) 
+				plr.SendResponse(SendingMessageType.PrivateRoomRunFinished, new RoomRunFinished() { player = player.name, time = player.time });
+		}
+		Run[] runs = [];
+		foreach (Player plr in players) 
+		{
+			if (plr.runFinished && plr.UUID != player.UUID) 
+			{
+				Run run = new()
+				{
+					name = plr.name,
+					time = plr.time
+				};
+				runs = [ .. runs, run ];
+			}
+		}
+		BatchRoomRunsFinished batch = new()
+		{
+			times = runs
+		};
+		if (runs.Length != 0)
+			player.SendResponse(SendingMessageType.PrivateRoomBatchRunsFinished, batch);
+		bool allFinished = players.All((v) => v.runFinished);
+		if (allFinished) 
+			foreach (Player plr in players)
+				plr.SendResponse(SendingMessageType.PrivateRoomEveryoneCompleted);
+	}
+	
+	/*private static void ProcessRoom_Finished(PrivateRoom room) 
+	{
+		Player[] players = [ room.host, .. room.connected ];
+		RoomRunFinished runFinished = new() 
+		{
+			player = player.name,
+			time = player.time
+		};
+		player.SendResponse(SendingMessageType.PrivateRoomRunFinished, runFinished);
+	}*/
+
+	public static async Task RoomReadyLoop() 
+	{
+		while (true) 
+		{
+			await Task.Delay(20);
+			foreach (PrivateRoom room in Rooms.rooms)
+				ProcessRoom_Ready(room);
 		}
 	}
 }
