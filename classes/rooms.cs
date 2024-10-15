@@ -3,7 +3,7 @@ namespace VapSRServer;
 public static class Rooms 
 {
 	private static Random random = new();
-	private const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+	private const string chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-+[]\\_=;";
 	public static PrivateRoom[] rooms = [];
 	public static bool RoomCodeExists(string code) 
 	{
@@ -29,17 +29,18 @@ public static class Rooms
 	{
 		PrivateRoom room = new() 
 		{
-			player1 = player,
+			host = player,
+			connected = [],
 			code = GenerateCode()
 		};
-		player.SendResponse(new(SendingMessageType.PrivateRoomCreated, new RoomData() { code = room.code }));
+		player.SendResponse(SendingMessageType.PrivateRoomCreated, new RoomData() { code = room.code });
 		rooms = [ .. rooms, room ];
 		return room;
 	}
 	
 	private static string GenerateCode() 
 	{
-		string code = new(Enumerable.Repeat(chars, 6)
+		string code = new(Enumerable.Repeat(chars, 8)
 			.Select(s => s[random.Next(s.Length)]).ToArray());
 		if (RoomCodeExists(code))
 			return GenerateCode();

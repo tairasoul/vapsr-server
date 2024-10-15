@@ -1,5 +1,3 @@
-using MessagePack;
-using Newtonsoft.Json;
 using VapSRServer;
 
 public class Handlers 
@@ -20,19 +18,40 @@ public class Handlers
 		player.SendResponse(response);
 	}
 	
+	private static void RoomRouteStageFinished(ref Player player, PlayerCompletedStageInfo data) 
+	{
+		PrivateRoom room = player.room;
+		PlayerCompletedStage stage = new() 
+		{
+			playerName = player.name,
+			stage = data.stage
+		};
+		room.host.SendResponse(SendingMessageType.PlayerFinishedStage, stage);
+		Player[] players = [ room.host, ..room.connected ];
+		foreach (Player connectedClient in players) 
+		{
+			if (connectedClient.UUID != player.UUID)
+				connectedClient.SendResponse(SendingMessageType.PlayerFinishedStage, stage);
+		}
+	}
+	
 	[MessageHandler(ReceivingMessageType.RouteStageFinished)]
 	public static void RouteStageFinished(ref Player player, object data) 
 	{
+		PlayerCompletedStageInfo info = (PlayerCompletedStageInfo)data;
+		if (player.inRoom) 
+		{
+			RoomRouteStageFinished(ref player, info);
+			return;
+		}
 		if (player.upAgainst == null)
 			return;
-		PlayerCompletedStageInfo info = (PlayerCompletedStageInfo)data;
 		PlayerCompletedStage stage = new() 
 		{
 			playerName = player.name,
 			stage = info.stage
 		};
-		Response response = new(SendingMessageType.PlayerFinishedStage, stage);
-		player.upAgainst.SendResponse(response);
+		player.upAgainst.SendResponse(SendingMessageType.PlayerFinishedStage, stage);
 	}
 	
 	[MessageHandler(ReceivingMessageType.UserInfo)]
@@ -70,7 +89,7 @@ public class Handlers
 		player2.runStarted = false;
 		player.time = 0f;
 		player2.time = 0f;
-		player2.SendResponse(new(SendingMessageType.OtherPlayerForfeit, new MatchFoundResult() { playerName = player.name }));
+		player2.SendResponse(SendingMessageType.OtherPlayerForfeit, new MatchFoundResult() { playerName = player.name });
 	}
 	
 	[MessageHandler(ReceivingMessageType.CancelMatchmaking)]
@@ -91,7 +110,58 @@ public class Handlers
 		};
 		player.inRoom = true;
 		player.room = createdRoom;
-		player.SendResponse(new(SendingMessageType.PrivateRoomCreated, creation));
+		player.SendResponse(SendingMessageType.PrivateRoomCreated, creation);
+	}
+
+	private static string[] GrabNames(Player[] connected) 
+	{
+		string[] connectedNames = [];
+		foreach (Player player in connected)
+			connectedNames = [ .. connectedNames, player.name ];
+		return connectedNames;
+	}
+	
+	private static void UpdateRoomData(PrivateRoom room) 
+	{
+		RoomReplicationData replicationData = new() 
+		{
+			host = room.host.name,
+			code = room.code,
+			opponents = GrabNames(room.connected)
+		};
+		Player[] players = [ room.host, .. room.connected ];
+		room.host.SendResponse(SendingMessageType.ReplicateRoomData, replicationData);
+		foreach (Player connectedClient in players)
+			connectedClient.SendResponse(SendingMessageType.ReplicateRoomData, replicationData);
+	}
+	
+	private static void UpdateRoomData(PrivateRoom room, Player exclude) 
+	{
+		RoomReplicationData replicationData = new() 
+		{
+			host = room.host.name,
+			code = room.code,
+			opponents = GrabNames(room.connected)
+		};
+		Player[] players = [ room.host, .. room.connected ];
+		room.host.SendResponse(SendingMessageType.ReplicateRoomData, replicationData);
+		foreach (Player connectedClient in players)
+			if (connectedClient.UUID != exclude.UUID)
+				connectedClient.SendResponse(SendingMessageType.ReplicateRoomData, replicationData);
+	}
+	
+	private static void RoomStarted(PrivateRoom room) 
+	{
+		if (!room.host.isInGame)
+			room.host.SendResponse(SendingMessageType.RequestSeed);
+		Player[] players = [room.host, ..room.connected];
+		foreach (Player connectedClient in players) 
+		{
+			if (connectedClient.isInGame)
+				continue;
+			connectedClient.isInGame = true;
+			connectedClient.SendResponse(SendingMessageType.PrivateRoomStarted);
+		}
 	}
 	
 	[MessageHandler(ReceivingMessageType.JoinPrivateRoom)]
@@ -100,30 +170,25 @@ public class Handlers
 		if (player.inRoom)
 			return;
 		RoomData roomData = (RoomData)data;
-		player.inRoom = true;
 		if (Rooms.RoomCodeExists(roomData.code)) 
 		{
+			player.inRoom = true;
 			PrivateRoom room = Rooms.GetRoom(roomData.code);
-			room.player2 = player;
 			player.room = room;
-			RoomReplicationData replicationData1 = new() 
+			Player[] playerUpd = [ .. room.connected, player ];
+			RoomReplicationData replicationData = new() 
 			{
-				localPlayerName = room.player1.name,
-				opponentName = room.player2.name,
-				code = roomData.code
+				host = room.host.name,
+				code = room.code,
+				opponents = GrabNames(playerUpd)
 			};
-			RoomReplicationData replicationData2 = new() 
-			{
-				opponentName = room.player1.name,
-				localPlayerName = room.player2.name,
-				code = roomData.code
-			};
-			room.player1.SendResponse(new Response(SendingMessageType.ReplicateRoomData, replicationData1));
-			player.SendResponse(new Response(SendingMessageType.PrivateRoomJoinAttempt, new RoomJoinAttempt() { RoomJoined = true, replicationData = replicationData2 }));
+			room.connected = playerUpd;
+			UpdateRoomData(room, player);
+			player.SendResponse(SendingMessageType.PrivateRoomJoinAttempt, new RoomJoinAttempt() { RoomJoined = true, replicationData = replicationData });
 		}
 		else 
 		{
-			player.SendResponse(new Response(SendingMessageType.PrivateRoomJoinAttempt, new RoomJoinAttempt() { RoomJoined = false }));
+			player.SendResponse(SendingMessageType.PrivateRoomJoinAttempt, new RoomJoinAttempt() { RoomJoined = false });
 		}
 	}
 	
@@ -133,14 +198,23 @@ public class Handlers
 		if (!player.inRoom)
 			return;
 		PrivateRoom room = player.room;
-		if (room.player2 == null)
+		if (room.connected.Length < 1)
 			return;
-		room.player1.upAgainst = room.player2;
-		room.player2.upAgainst = room.player1;
-		room.player1.isInGame = true;
-		room.player2.isInGame = true;
-		room.player1.SendResponse(new Response(SendingMessageType.PrivateRoomStarted));
-		room.player2.SendResponse(new Response(SendingMessageType.PrivateRoomStarted));
+		RoomStarted(room);
+		//room.player1.SendResponse(new Response(SendingMessageType.PrivateRoomStarted));
+		//room.player2.SendResponse(new Response(SendingMessageType.PrivateRoomStarted));
+	}
+	
+	private static void HostLeft(PrivateRoom room) 
+	{
+		Player? nextHost = room.connected.FirstOrDefault();
+		if (nextHost == null) 
+		{
+			Rooms.RemoveRoom(room.code);
+			return;
+		}
+		room.host = nextHost;
+		UpdateRoomData(room);
 	}
 	
 	[MessageHandler(ReceivingMessageType.LeavePrivateRoom)]
@@ -148,16 +222,15 @@ public class Handlers
 	{
 		if (!player.inRoom)
 			return;
-		if (player.room.player1 == player)
-			if (player.room.player2 != null)
-				player.room.player2.SendResponse(new Response(SendingMessageType.ReplicateRoomData, new RoomReplicationData() { localPlayerName = player.room.player2.name, opponentName = null, code = player.room.code }));
-			else
-				Rooms.RemoveRoom(player.room.code);
-		if (player.room.player2 == player)
-			if (player.room.player1 != null)
-				player.room.player1.SendResponse(new Response(SendingMessageType.ReplicateRoomData, new RoomReplicationData() { localPlayerName = player.room.player1.name, opponentName = null, code = player.room.code }));
-			else
-				Rooms.RemoveRoom(player.room.code);
+		player.inRoom = false;
+		if (player.room.host == player)
+			HostLeft(player.room);
+		else 
+		{
+			Player plr = player;
+			player.room.connected = player.room.connected.Where((v) => v.UUID != plr.UUID).ToArray();
+			UpdateRoomData(player.room);
+		}
 	}
 	
 	[MessageHandler(ReceivingMessageType.RngSeed)]
@@ -165,6 +238,16 @@ public class Handlers
 	{
 		RngData rng = (RngData)data;
 		Console.WriteLine($"{player.name}'s rng seed: {rng.seed}");
-		player.upAgainst.SendResponse(new Response(SendingMessageType.RngSeedSet, rng));
+		if (player.inRoom) 
+		{
+			Player[] players = [ player.room.host, .. player.room.connected ];
+			foreach (Player client in players) 
+			{
+				if (client.UUID != player.UUID)
+					client.SendResponse(SendingMessageType.RngSeedSet, rng);
+			}
+			return;
+		}
+		player.upAgainst.SendResponse(SendingMessageType.RngSeedSet, rng);
 	}
 }

@@ -1,7 +1,7 @@
 using System.Reflection;
-using Newtonsoft.Json;
 using TcpSharp;
-using MessagePack;
+using ProtoBuf;
+
 namespace VapSRServer;
 
 public class Player 
@@ -10,6 +10,7 @@ public class Player
 	public string UUID;
 	public string name;
 	public PrivateRoom room;
+	public event EventHandler RunFinished;
 	public long lastResponseTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 	public bool inRoom;
 	public bool isInGame;
@@ -19,16 +20,30 @@ public class Player
 	public bool isLoaded;
 	public bool matchmaking;
 	public Player upAgainst;
+	public void ClearFinishedListeners() 
+	{
+		foreach (Delegate d in RunFinished.GetInvocationList()) {
+			RunFinished -= (EventHandler)d;
+		}
+	}
 	public void SendResponse(Response response) 
 	{
 		client.SendBytes(response.Bytes());
+	}
+	public void SendResponse(SendingMessageType messageType, object? data) 
+	{
+		client.SendBytes(new Response(messageType, data).Bytes());
+	}
+	public void SendResponse(SendingMessageType messageType) 
+	{
+		client.SendBytes(new Response(messageType).Bytes());
 	}
 }
 
 public class PrivateRoom 
 {
-	public Player player1;
-	public Player player2;
+	public Player host;
+	public Player[] connected;
 	public string code;
 }
 
@@ -38,72 +53,101 @@ public struct HandlerClassInfo
 	public MessageHandler attribute;
 }
 
-[MessagePackObject(true)]
+[ProtoContract]
 public class MatchFoundResult 
 {
-	public MatchFoundResult() { }
-	public string playerName;
+	[ProtoMember(1)]
+	public string playerName {get; set;}
 }
 
-[MessagePackObject(true)]
+[ProtoContract]
 public class PlayerCompletedStage 
 {
-	public PlayerCompletedStage() { }
-	public string playerName;
-	public string stage;
+	[ProtoMember(1)]
+	public string playerName {get; set;}
+	[ProtoMember(2)]	
+	public string stage {get; set;}
 }
 
-[MessagePackObject(true)]
+[ProtoContract]
 public class PlayerCompletedStageInfo 
 {
-	public PlayerCompletedStageInfo() { }
-	public string stage;
+	[ProtoMember(1)]
+	public string stage {get; set;}
 }
 
-[MessagePackObject(true)]
+[ProtoContract]
 public class RunFinishedInfo 
 {
-	public RunFinishedInfo() { }
-	public float time;
+	[ProtoMember(1)]
+	public float time {get; set;}
 }
 
-[MessagePackObject(true)]
+[ProtoContract]
 public class RunFinishedRelayInfo 
 {
-	public RunFinishedRelayInfo() { }
-	public string playerName;
-	public float time;
-	public bool youWon;
+	[ProtoMember(1)]
+	public string playerName {get; set;}
+	[ProtoMember(2)]
+	public float time {get; set;}
+	[ProtoMember(3)]
+	public bool youWon {get; set;}
 }
 
-[MessagePackObject(true)]
+[ProtoContract]
 public class UserInfo 
 {
-	public UserInfo() { }
-	public string username;
+	[ProtoMember(1)]
+	public string username {get; set;}
 	//public string id;
 }
 
-[MessagePackObject(true)]
+[ProtoContract]
 public class RngData 
 {
-	public RngData() { }
-	public int seed;
+	[ProtoMember(1)]
+	public int seed {get; set;}
 }
 
-[MessagePackObject(true)]
+[ProtoContract]
 public class Request 
 {
-	public Request() { }
-	public string type;
-	public object? data;
+	[ProtoMember(1)]
+	public string type {get; set;}
+	[ProtoMember(2)]
+	private byte[]? _data {get; set;}
+	[ProtoIgnore]
+	public object? data
+	{ 
+		get => DeserializeData(); 
+		set => _data = value != null ? SerializeData(value) : null; 
+	}
+	private byte[]? SerializeData(object data)
+	{
+		using MemoryStream stream = new();
+		Serializer.Serialize(stream, data);
+		return stream.ToArray();
+	}
+	private object? DeserializeData()
+	{
+		if (_data == null)
+			return null;
+		using var stream = new MemoryStream(_data);
+		return type switch
+		{
+			"UserInfo" => Serializer.Deserialize<UserInfo>(stream),
+			"RouteStageFinished" => Serializer.Deserialize<PlayerCompletedStageInfo>(stream),
+			"RngSeed" => Serializer.Deserialize<RngData>(stream),
+			"RunFinished" => Serializer.Deserialize<RunFinishedInfo>(stream),
+			"JoinPrivateRoom" => Serializer.Deserialize<RoomData>(stream),
+			_ => null,
+		};
+	}
 }
 
-[MessagePackObject(true)]
+[ProtoContract]
 public class Response 
 {
-	
-	public Response() { }
 	public Response(SendingMessageType sendType, object? body) 
 	{
 		type = sendType.ToString();
@@ -113,44 +157,89 @@ public class Response
 	{
 		type = sendType.ToString();
 	}
-	public string type;
-	public object? data;
+	[ProtoMember(1)]
+	public string type {get; set;}
+	[ProtoMember(2)]
+	private byte[]? _data {get; set;}
+	[ProtoIgnore]
+	public object? data
+	{ 
+		set => _data = value != null ? SerializeData(value) : null; 
+	}
+	private byte[]? SerializeData(object data)
+	{
+		using MemoryStream stream = new();
+		Serializer.Serialize(stream, data);
+		return stream.ToArray();
+	}
 	
 	public byte[] Bytes() 
 	{
-		return MessagePackSerializer.Serialize(this);
+		using MemoryStream stream = new();
+		Serializer.Serialize(stream, this);
+		return stream.ToArray();
 	}
 }
 
-[MessagePackObject(true)]
+[ProtoContract]
 public class RoomData 
 {
-	public RoomData() {}
-	public string code;
+	[ProtoMember(1)]
+	public string code {get; set;}
 }
 
-[MessagePackObject(true)]
+[ProtoContract]
 public class RoomReplicationData 
 {
-	public RoomReplicationData() {}
-	public string localPlayerName;
-	public string opponentName;
-	public string code;
+	[ProtoMember(1)]
+	public string host {get; set;}
+	[ProtoMember(2)]
+	public string[] opponents {get; set;}
+	[ProtoMember(3)]
+	public string code {get; set;}
 }
 
-[MessagePackObject(true)]
+[ProtoContract]
 public class RoomJoinAttempt 
 {
-	public RoomJoinAttempt() {}
-	public bool RoomJoined;
-	public RoomReplicationData? replicationData;
+	[ProtoMember(1)]
+	public bool RoomJoined {get; set;}
+	[ProtoMember(2)]
+	public RoomReplicationData? replicationData {get; set;}
 }
 
-[MessagePackObject(true)]
+[ProtoContract]
+public class Run 
+{
+	[ProtoMember(1)]
+	public string name {get; set;}
+	[ProtoMember(2)]
+	public float time {get; set;}
+}
+
+[ProtoContract]
+public class BatchRoomRunsFinished 
+{
+	[ProtoMember(1)]
+	public Run[] times {get; set;}
+}
+
+[ProtoContract]
+public class RoomRunFinished 
+{
+	[ProtoMember(1)]
+	public string player {get; set;}
+	[ProtoMember(2)]
+	public float time {get; set;}
+}
+
+[ProtoContract]
 public class RunConfigInfo 
 {
-	public RunConfigInfo() {}
-	public string fileName;
-	public string path;
-	public string json;
+	[ProtoMember(1)]
+	public string fileName {get; set;}
+	[ProtoMember(2)]
+	public string path {get; set;}
+	[ProtoMember(3)]
+	public string json {get; set;}
 }

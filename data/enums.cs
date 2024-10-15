@@ -30,5 +30,9 @@ public enum SendingMessageType
 	PrivateRoomCreated,
 	PrivateRoomStarted,
 	PrivateRoomJoinAttempt,
-	ReplicateRoomData
+	ReplicateRoomData,
+	OpponentForfeit,
+	PrivateRoomRunFinished,
+	PrivateRoomBatchRunsFinished,
+	PrivateRoomEveryoneCompleted
 }
