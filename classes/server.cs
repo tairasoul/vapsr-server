@@ -8,12 +8,14 @@ namespace VapSRServer;
 public class ServerHandler 
 {
 	private TcpSharpSocketServer server;
+	internal static bool debug;
 	
 	HandlerClassInfo[] info = [];
 	
-	public ServerHandler(int port) 
+	public ServerHandler(int port, bool debug) 
 	{
 		server = new(port);
+		ServerHandler.debug = debug;
 		GrabHandlers();
 		Task.Run(Matchmaker.MatchmakingLoop);
 		Task.Run(Matchmaker.ReadyLoop);
@@ -24,6 +26,8 @@ public class ServerHandler
 	private static async Task KeepAlive(ConnectedClient client) 
 	{
 		await Task.Delay(2000);
+		if (debug)
+			Console.WriteLine($"Sending KeepAlive to client {client.ConnectionId}");
 		client.SendString("k");
 	}
 	
@@ -40,7 +44,13 @@ public class ServerHandler
 	
 	private void Room_OpponentForfeit(PrivateRoom room, Player player) 
 	{
-		
+		player.ClearFinishedListeners();
+		server.Disconnect(player.UUID);
+		if (room.host == player) 
+			Handlers.HostLeft(room);
+		Player[] players = [room.host, .. room.connected];
+		foreach (Player plr in players) 
+			plr.SendResponse(SendingMessageType.OpponentForfeit, new PlayerResult() { playerName = player.name });
 	}
 	
 	private async Task PruneDeadClients() 
@@ -55,7 +65,7 @@ public class ServerHandler
 				if (player.upAgainst != null) 
 				{
 					Console.WriteLine($"Telling {player.name}'s opponent they have forfeited.");
-					player.upAgainst.SendResponse(SendingMessageType.OtherPlayerForfeit, new MatchFoundResult() { playerName = player.name });
+					player.upAgainst.SendResponse(SendingMessageType.OtherPlayerForfeit, new PlayerResult() { playerName = player.name });
 					server.Disconnect(player.UUID);
 					return;
 				}
@@ -87,12 +97,14 @@ public class ServerHandler
 				client = server.GetClient(args.ConnectionId)
 			};
 			PlayerPool.players = [ .. PlayerPool.players, player ];
-			Console.WriteLine($"Player connected, uuid {args.ConnectionId}");
+			if (debug)
+				Console.WriteLine($"Player connected, uuid {args.ConnectionId}");
 		};
 		
 		server.OnDisconnected += (object sender, OnServerDisconnectedEventArgs args) =>
 		{
-			Console.WriteLine($"Player disconnected, uuid {args.ConnectionId}");
+			if (debug)
+				Console.WriteLine($"Player disconnected, uuid {args.ConnectionId}");
 			PlayerPool.players = PlayerPool.players.Where(player => player.UUID != args.ConnectionId).ToArray();
 		};
 		
@@ -104,7 +116,8 @@ public class ServerHandler
 				player.lastResponseTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 			if (Encoding.UTF8.GetString(args.Data) == "k")
 				return;
-			Console.WriteLine($"Player sent data, username {player?.name} uuid {uuid}");
+			if (debug)
+				Console.WriteLine($"Player sent data, username {player?.name} uuid {uuid}");
 			MessagePackSerializerOptions opts = MessagePackSerializerOptions.Standard.WithResolver(
 				MessagePack.Resolvers.CompositeResolver.Create(
 					[new RequestFormatter()],
@@ -114,7 +127,8 @@ public class ServerHandler
 			Request dataS = MessagePackSerializer.Deserialize<Request>(args.Data, opts);
 			//Request dataS = Serializer.Deserialize<Request>(args.Data.AsMemory());
 			string data = Newtonsoft.Json.JsonConvert.SerializeObject(dataS);
-			Console.WriteLine($"Data: {data}");
+			if (debug)
+				Console.WriteLine($"Data: {data}");
 			HandleData(uuid, dataS);
 		};
 		
@@ -163,7 +177,8 @@ public class ServerHandler
 			)
 		).WithCompression(MessagePackCompression.Lz4Block);*/
 		//MessagePackSerializerOptions opts = MessagePackSerializerOptions.Standard.WithCompression(MessagePackCompression.Lz4Block);
-		Console.WriteLine($"Request type: {request.type}");
+		if (debug)
+			Console.WriteLine($"Request type: {request.type}");
 		if (request.type == "Disconnect") 
 		{
 			server.Disconnect(uuid);

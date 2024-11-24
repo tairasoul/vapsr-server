@@ -36,15 +36,21 @@ public class Player
 		RunFinished.Invoke(this, new RunFinishedArgs() { time = time });
 	}
 	public void SendResponse(Response response) 
-	{
+	{	
+		if (ServerHandler.debug)
+			Console.WriteLine($"Sending {response.type} to {name}");
 		client.SendBytes(response.Bytes());
 	}
 	public void SendResponse(SendingMessageType messageType, object? data) 
 	{
+		if (ServerHandler.debug)
+			Console.WriteLine($"Sending {messageType} to {name}");
 		client.SendBytes(new Response(messageType, data).Bytes());
 	}
 	public void SendResponse(SendingMessageType messageType) 
 	{
+		if (ServerHandler.debug)
+			Console.WriteLine($"Sending {messageType} to {name}");
 		client.SendBytes(new Response(messageType).Bytes());
 	}
 }
@@ -63,9 +69,9 @@ public struct HandlerClassInfo
 }
 
 [MessagePackObject(true)]
-public class MatchFoundResult 
+public class PlayerResult 
 {
-	public MatchFoundResult() {}
+	public PlayerResult() {}
 	public string playerName;
 }
 
@@ -192,6 +198,13 @@ public class RoomRunFinished
 	public RoomRunFinished() {}
 	public string player;
 	public float time;
+}
+
+[MessagePackObject(true)]
+public class PrivateRoomNewHost 
+{
+	public PrivateRoomNewHost() {}
+	public bool youAreNewHost;
 }
 
 [MessagePackObject(true)]

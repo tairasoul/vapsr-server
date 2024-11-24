@@ -5,7 +5,8 @@ public class Handlers
 	[MessageHandler(ReceivingMessageType.LoadingFinished)]
 	public static void LoadingFinished(ref Player player, object data) 
 	{
-		Console.WriteLine($"Player uuid {player.UUID} finished loading.");
+		if (ServerHandler.debug)
+			Console.WriteLine($"Player uuid {player.UUID} finished loading.");
 		player.isLoaded = true;
 	}
 	
@@ -14,7 +15,6 @@ public class Handlers
 	{
 		player.matchmaking = true;
 		Response response = new(SendingMessageType.MatchmakingStarted);
-		Console.WriteLine($"Starting matchmaking for player with uuid {player.UUID}");
 		player.SendResponse(response);
 	}
 	
@@ -26,11 +26,10 @@ public class Handlers
 			playerName = player.name,
 			stage = data.stage
 		};
-		room.host.SendResponse(SendingMessageType.PlayerFinishedStage, stage);
 		Player[] players = [ room.host, ..room.connected ];
 		foreach (Player connectedClient in players) 
 		{
-			if (connectedClient.UUID != player.UUID)
+			if (connectedClient != player) 
 				connectedClient.SendResponse(SendingMessageType.PlayerFinishedStage, stage);
 		}
 	}
@@ -69,7 +68,8 @@ public class Handlers
 		player.runFinished = true;
 		player.time = info.time;
 		player.RunCompleted();
-		Console.WriteLine($"Player {player.name} finished with time {info.time}");
+		if (ServerHandler.debug)
+			Console.WriteLine($"Player {player.name} finished with time {info.time}");
 	}
 	
 	[MessageHandler(ReceivingMessageType.LeftToMenu)]
@@ -90,7 +90,7 @@ public class Handlers
 		player2.runStarted = false;
 		player.time = 0f;
 		player2.time = 0f;
-		player2.SendResponse(SendingMessageType.OtherPlayerForfeit, new MatchFoundResult() { playerName = player.name });
+		player2.SendResponse(SendingMessageType.OtherPlayerForfeit, new PlayerResult() { playerName = player.name });
 	}
 	
 	[MessageHandler(ReceivingMessageType.CancelMatchmaking)]
@@ -180,6 +180,15 @@ public class Handlers
 		}
 	}
 	
+	[MessageHandler(ReceivingMessageType.RequestCurrentHost)]
+	public static void RequestCurrentHost(ref Player player, object data) 
+	{
+		if (!player.inRoom)
+			return;
+		PrivateRoom room = player.room;
+		player.SendResponse(SendingMessageType.PrivateRoomNewHost, new PrivateRoomNewHost() { youAreNewHost = room.host == player });
+	}
+	
 	[MessageHandler(ReceivingMessageType.PrivateRoomStart)]
 	public static void StartPrivateRoom(ref Player player, object data) 
 	{
@@ -193,7 +202,7 @@ public class Handlers
 		//room.player2.SendResponse(new Response(SendingMessageType.PrivateRoomStarted));
 	}
 	
-	private static void HostLeft(PrivateRoom room) 
+	internal static void HostLeft(PrivateRoom room) 
 	{
 		Player? nextHost = room.connected.FirstOrDefault();
 		if (nextHost == null) 
@@ -225,7 +234,8 @@ public class Handlers
 	public static void RngSeed(ref Player player, object data) 
 	{
 		RngData rng = (RngData)data;
-		Console.WriteLine($"{player.name}'s rng seed: {rng.seed}");
+		if (ServerHandler.debug)
+			Console.WriteLine($"{player.name}'s rng seed: {rng.seed}");
 		if (player.inRoom) 
 		{
 			player.isInGame = true;

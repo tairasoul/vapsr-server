@@ -8,11 +8,11 @@ public class Matchmaker
 		player2.matchmaking = false;
 		player1.isInGame = true;
 		player2.isInGame = true;
-		MatchFoundResult result1 = new() 
+		PlayerResult result1 = new() 
 		{
 			playerName = player2.name
 		};
-		MatchFoundResult result2 = new() 
+		PlayerResult result2 = new() 
 		{
 			playerName = player1.name
 		};
@@ -147,7 +147,8 @@ public class Matchmaker
 	
 	private static void ProcessRoom_Finished(Player player, float time) 
 	{
-		Console.WriteLine($"Player {player.name} finished run in private room with time {time}");
+		if (ServerHandler.debug)
+			Console.WriteLine($"Player {player.name} finished run in private room with time {time}");
 		player.ClearFinishedListeners();
 		PrivateRoom room = player.room;
 		Player[] players = [ room.host, .. room.connected ];
@@ -175,6 +176,13 @@ public class Matchmaker
 		};
 		if (runs.Length != 0)
 			player.SendResponse(SendingMessageType.PrivateRoomBatchRunsFinished, batch);
+		Task.Run(() => RoomFinishedCheck(room));
+	}
+	
+	private static async Task RoomFinishedCheck(PrivateRoom room) 
+	{
+		Player[] players = [ room.host, .. room.connected ];
+		await Task.Delay(2000);
 		bool allFinished = players.All((v) => v.runFinished);
 		if (allFinished) 
 			foreach (Player plr in players)
