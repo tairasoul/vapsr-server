@@ -3,7 +3,7 @@ namespace VapSRServer;
 public static class Rooms 
 {
 	private static Random random = new();
-	private const string chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-+[]\\_=;";
+	private const string chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-+[]_=;";
 	public static PrivateRoom[] rooms = [];
 	public static bool RoomCodeExists(string code) 
 	{

@@ -1,8 +1,6 @@
 using System.Reflection;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using ProtoBuf;
+using MessagePack;
 using TcpSharp;
 
 namespace VapSRServer;
@@ -107,10 +105,17 @@ public class ServerHandler
 			if (Encoding.UTF8.GetString(args.Data) == "k")
 				return;
 			Console.WriteLine($"Player sent data, username {player?.name} uuid {uuid}");
-			Request dataS = Serializer.Deserialize<Request>(args.Data.AsMemory());
-			string data = JsonSerializer.Serialize(dataS);
+			MessagePackSerializerOptions opts = MessagePackSerializerOptions.Standard.WithResolver(
+				MessagePack.Resolvers.CompositeResolver.Create(
+					[new RequestFormatter()],
+					[MessagePack.Resolvers.StandardResolver.Instance]
+				)
+			);
+			Request dataS = MessagePackSerializer.Deserialize<Request>(args.Data, opts);
+			//Request dataS = Serializer.Deserialize<Request>(args.Data.AsMemory());
+			string data = Newtonsoft.Json.JsonConvert.SerializeObject(dataS);
 			Console.WriteLine($"Data: {data}");
-			HandleData(uuid, args.Data);
+			HandleData(uuid, dataS);
 		};
 		
 		server.OnError += (object sender, OnServerErrorEventArgs args) => 
@@ -149,7 +154,7 @@ public class ServerHandler
 		}
 	}
 	
-	private void HandleData(string uuid, byte[] data) 
+	private void HandleData(string uuid, Request request) 
 	{
 		/*MessagePackSerializerOptions opts = MessagePackSerializerOptions.Standard.WithResolver(
 			MessagePack.Resolvers.CompositeResolver.Create(
@@ -158,7 +163,6 @@ public class ServerHandler
 			)
 		).WithCompression(MessagePackCompression.Lz4Block);*/
 		//MessagePackSerializerOptions opts = MessagePackSerializerOptions.Standard.WithCompression(MessagePackCompression.Lz4Block);
-		Request request = Serializer.Deserialize<Request>(data.AsMemory());
 		Console.WriteLine($"Request type: {request.type}");
 		if (request.type == "Disconnect") 
 		{

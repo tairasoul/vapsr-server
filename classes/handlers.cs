@@ -68,6 +68,7 @@ public class Handlers
 		RunFinishedInfo info = (RunFinishedInfo)data;
 		player.runFinished = true;
 		player.time = info.time;
+		player.RunCompleted();
 		Console.WriteLine($"Player {player.name} finished with time {info.time}");
 	}
 	
@@ -130,32 +131,15 @@ public class Handlers
 			opponents = GrabNames(room.connected)
 		};
 		Player[] players = [ room.host, .. room.connected ];
-		room.host.SendResponse(SendingMessageType.ReplicateRoomData, replicationData);
 		foreach (Player connectedClient in players)
 			connectedClient.SendResponse(SendingMessageType.ReplicateRoomData, replicationData);
-	}
-	
-	private static void UpdateRoomData(PrivateRoom room, Player exclude) 
-	{
-		RoomReplicationData replicationData = new() 
-		{
-			host = room.host.name,
-			code = room.code,
-			opponents = GrabNames(room.connected)
-		};
-		Player[] players = [ room.host, .. room.connected ];
-		room.host.SendResponse(SendingMessageType.ReplicateRoomData, replicationData);
-		foreach (Player connectedClient in players)
-			if (connectedClient.UUID != exclude.UUID)
-				connectedClient.SendResponse(SendingMessageType.ReplicateRoomData, replicationData);
 	}
 	
 	private static void RoomStarted(PrivateRoom room) 
 	{
 		if (!room.host.isInGame)
 			room.host.SendResponse(SendingMessageType.RequestSeed);
-		Player[] players = [room.host, ..room.connected];
-		foreach (Player connectedClient in players) 
+		foreach (Player connectedClient in room.connected) 
 		{
 			if (connectedClient.isInGame)
 				continue;
@@ -183,7 +167,11 @@ public class Handlers
 				opponents = GrabNames(playerUpd)
 			};
 			room.connected = playerUpd;
-			UpdateRoomData(room, player);
+			Player[] players = [ room.host, .. room.connected ];
+			Player plr = player;
+			players = [ .. players.Where((v) => v.UUID != plr.UUID)];
+			foreach (Player connectedClient in players)
+				connectedClient.SendResponse(SendingMessageType.ReplicateRoomData, replicationData);
 			player.SendResponse(SendingMessageType.PrivateRoomJoinAttempt, new RoomJoinAttempt() { RoomJoined = true, replicationData = replicationData });
 		}
 		else 
@@ -240,8 +228,9 @@ public class Handlers
 		Console.WriteLine($"{player.name}'s rng seed: {rng.seed}");
 		if (player.inRoom) 
 		{
-			Player[] players = [ player.room.host, .. player.room.connected ];
-			foreach (Player client in players) 
+			player.isInGame = true;
+			player.SendResponse(SendingMessageType.PrivateRoomStarted);
+			foreach (Player client in player.room.connected) 
 			{
 				if (client.UUID != player.UUID)
 					client.SendResponse(SendingMessageType.RngSeedSet, rng);
