@@ -14,7 +14,8 @@ public enum ReceivingMessageType
 	JoinPrivateRoom,
 	PrivateRoomStart,
 	CancelMatchmaking,
-	LeavePrivateRoom
+	LeavePrivateRoom,
+	RequestCurrentHost
 }
 
 public enum SendingMessageType 
@@ -34,5 +35,6 @@ public enum SendingMessageType
 	OpponentForfeit,
 	PrivateRoomRunFinished,
 	PrivateRoomBatchRunsFinished,
-	PrivateRoomEveryoneCompleted
+	PrivateRoomEveryoneCompleted,
+	PrivateRoomNewHost
 }
