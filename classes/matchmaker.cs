@@ -77,8 +77,8 @@ public class Matchmaker
 			player2.runStarted = false;
 			player1.time = 0f;
 			player2.time = 0f;
-			player1.SendResponse(new Response(SendingMessageType.RunStopped, info1));
-			player2.SendResponse(new Response(SendingMessageType.RunStopped, info2));
+			player1.SendResponse(SendingMessageType.RunStopped, info1);
+			player2.SendResponse(SendingMessageType.RunStopped, info2);
 		}
 	}
 	
@@ -106,9 +106,8 @@ public class Matchmaker
 		{
 			player1.runStarted = true;
 			player2.runStarted = true;
-			Response response = new(SendingMessageType.StartRun);
-			player1.SendResponse(response);
-			player2.SendResponse(response);
+			player1.SendResponse(SendingMessageType.StartRun);
+			player2.SendResponse(SendingMessageType.StartRun);
 		}
 	}
 	
@@ -135,24 +134,27 @@ public class Matchmaker
 	{
 		Player[] players = [ room.host, .. room.connected ];
 		bool allReady = players.All((v) => v.isLoaded);
-		bool Started = players.Any((v) => v.runStarted);
-		if (allReady && !Started) 
+		if (allReady) 
 			foreach (Player player in players) 
 			{
+				if (player.runStarted)
+					continue;
+				player.runStarted = true;
 				player.SendResponse(SendingMessageType.StartRun);
-				player.RunFinished += (object _, EventArgs _) => ProcessRoom_Finished(player);
+				player.RunFinished += (object _, RunFinishedArgs args) => ProcessRoom_Finished(player, args.time);
 			}
 	}
 	
-	private static void ProcessRoom_Finished(Player player) 
+	private static void ProcessRoom_Finished(Player player, float time) 
 	{
+		Console.WriteLine($"Player {player.name} finished run in private room with time {time}");
 		player.ClearFinishedListeners();
 		PrivateRoom room = player.room;
 		Player[] players = [ room.host, .. room.connected ];
 		foreach (Player plr in players) 
 		{
 			if (plr.runFinished && plr.UUID != player.UUID) 
-				plr.SendResponse(SendingMessageType.PrivateRoomRunFinished, new RoomRunFinished() { player = player.name, time = player.time });
+				plr.SendResponse(SendingMessageType.PrivateRoomRunFinished, new RoomRunFinished() { player = player.name, time = time });
 		}
 		Run[] runs = [];
 		foreach (Player plr in players) 
@@ -178,17 +180,6 @@ public class Matchmaker
 			foreach (Player plr in players)
 				plr.SendResponse(SendingMessageType.PrivateRoomEveryoneCompleted);
 	}
-	
-	/*private static void ProcessRoom_Finished(PrivateRoom room) 
-	{
-		Player[] players = [ room.host, .. room.connected ];
-		RoomRunFinished runFinished = new() 
-		{
-			player = player.name,
-			time = player.time
-		};
-		player.SendResponse(SendingMessageType.PrivateRoomRunFinished, runFinished);
-	}*/
 
 	public static async Task RoomReadyLoop() 
 	{
