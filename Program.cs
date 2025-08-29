@@ -1,4 +1,4 @@
-using VapSRServer;
+/*using VapSRServer;
 
 int port = int.Parse(Environment.GetEnvironmentVariable("VAPSR_SERVER_PORT", EnvironmentVariableTarget.Process) ?? "7777");
 bool debug = int.Parse(Environment.GetEnvironmentVariable("VAPSR_DEBUG", EnvironmentVariableTarget.Process) ?? "0") == 1;
@@ -9,5 +9,13 @@ if (debug)
 	Console.WriteLine("Logging extra debug information.");
 
 ServerHandler server = new(port, debug);
+
+await server.Start();*/
+using VapSRServer.Server;
+
+int port = int.Parse(Environment.GetEnvironmentVariable("VAPSR_SERVER_PORT", EnvironmentVariableTarget.Process) ?? "7777");
+bool debug = int.Parse(Environment.GetEnvironmentVariable("VAPSR_DEBUG", EnvironmentVariableTarget.Process) ?? "0") == 1;
+
+Server server = new(port, debug);
 
 await server.Start();
