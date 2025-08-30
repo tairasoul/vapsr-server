@@ -102,7 +102,6 @@ class Matchmaker {
     if (pool.matchmaking.Length > 1) {
       (Player, Player)[] pairs = [];
       (Player, Player) backlog = (null, null);
-      Console.WriteLine("matchmaking versus pass 1");
       Random.Shared.Shuffle(pool.matchmaking);
       foreach (Player player in pool.matchmaking) {
         if (backlog.Item1 == null) {
@@ -117,7 +116,6 @@ class Matchmaker {
           backlog.Item2 = null;
         }
       }
-      Console.WriteLine("matchmaking versus pass 2");
       foreach ((Player, Player) pair in pairs) {
         Player p1 = pair.Item1;
         Player p2 = pair.Item2;
@@ -127,8 +125,8 @@ class Matchmaker {
         p2.matchmaking = false;
         p1.isInGame = true;
         p2.isInGame = true;
-        PlayerResultCommon r1 = new() { playerName = p1.name };
-        PlayerResultCommon r2 = new() { playerName = p2.name };
+        PlayerResultCommon r1 = new() { playerName = p2.name };
+        PlayerResultCommon r2 = new() { playerName = p1.name };
         p1.upAgainst = p2;
         p2.upAgainst = p1;
         p1.SendResponse(S2CTypes.MatchFound, r1);
