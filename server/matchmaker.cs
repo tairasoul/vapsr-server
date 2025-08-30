@@ -190,6 +190,7 @@ class Matchmaker {
         player.RunFinished += (_, time) =>
         {
           pool.playerCompletedRun.Invoke(this, (player, time));
+          player.ClearFinishedListeners();
         };
       }
     }
