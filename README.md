@@ -10,4 +10,4 @@ default port is 7777, set environment variable VAPSR_SERVER_PORT to change it.
 
 most logging is disabled by default, set environment variable VAPSR_DEBUG to 1 to enable.
 
-runs on dotnet 6.0
+runs on dotnet 8.0
