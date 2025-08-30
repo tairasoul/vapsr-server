@@ -10,7 +10,7 @@ public class Player {
   public string UUID;
   public string name;
   public PrivateRoom? room;
-  public event EventHandler<float> RunFinished;
+  public EventHandler<float> RunFinished;
   public long lastResponseTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
   public bool inRoom;
   public bool isInGame;

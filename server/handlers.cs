@@ -65,8 +65,9 @@ static class Handlers {
   [MessageHandler(C2STypes.RunFinished)]
   public static void RunFinished(Player player, object data) {
     RunFinishedC2S info = (RunFinishedC2S)data;
-    MatchmakingInstance.pool.playerCompletedRun.Invoke(null, (player, info.time));
-		if (Server.debug)
+    player.RunFinished.Invoke(null, info.time);
+    //MatchmakingInstance.pool.playerCompletedRun.Invoke(null, (player, info.time));
+    if (Server.debug)
 			Console.WriteLine($"Player {player.name ?? player.UUID} finished with time {info.time}");
   }
 
