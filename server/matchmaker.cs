@@ -25,21 +25,21 @@ class PlayerPool {
     PlayerPool s = this;
     newPlayer += (_, player) =>
     {
-      if (s.lobby.First((Player v) => v.UUID == player.UUID) == null)
+      if (s.lobby.FirstOrDefault((Player v) => v.UUID == player.UUID, null) == null)
         s.lobby = [..s.lobby, player];
     };
     playerStartedMatchmaking += (_, player) =>
     {
       player.matchmaking = true;
       s.lobby = [..s.lobby.Where((v) => v.UUID != player.UUID)];
-      if (s.matchmaking.First((Player v) => v.UUID == player.UUID) == null)
+      if (s.matchmaking.FirstOrDefault((Player v) => v.UUID == player.UUID, null) == null)
         s.matchmaking = [.. s.matchmaking, player];
     };
     playerStoppedMatchmaking += (_, player) =>
     {
       player.matchmaking = false;
       s.matchmaking = [..s.matchmaking.Where((v) => v.UUID != player.UUID)];
-      if (s.lobby.First((Player v) => v.UUID == player.UUID) == null)
+      if (s.lobby.FirstOrDefault((Player v) => v.UUID == player.UUID, null) == null)
         s.lobby = [.. s.lobby, player];
     };
     playerCompletedRun += (_, tuple) =>
@@ -56,13 +56,13 @@ class PlayerPool {
     playerBusy += (_, player) =>
     {
       s.lobby = [..s.lobby.Where((v) => v.UUID != player.UUID)];
-      if (s.busy.First((Player v) => v.UUID == player.UUID) == null)
+      if (s.busy.FirstOrDefault((Player v) => v.UUID == player.UUID, null) == null)
         s.busy = [.. s.busy, player];
     };
     playerNotBusy += (_, player) =>
     {
       s.busy = [..s.busy.Where((v) => v.UUID != player.UUID)];
-      if (s.lobby.First((Player v) => v.UUID == player.UUID) == null)
+      if (s.lobby.FirstOrDefault((Player v) => v.UUID == player.UUID, null) == null)
         s.lobby = [.. s.lobby, player];
     };
     playerDisconnected += (_, player) =>
@@ -102,7 +102,9 @@ class Matchmaker {
     if (pool.matchmaking.Length > 1) {
       (Player, Player)[] pairs = [];
       (Player, Player) backlog = (null, null);
-      foreach (Player player in Random.Shared.CloneShuffle(pool.matchmaking)) {
+      Console.WriteLine("matchmaking versus pass 1");
+      Random.Shared.Shuffle(pool.matchmaking);
+      foreach (Player player in pool.matchmaking) {
         if (backlog.Item1 == null) {
           backlog.Item1 = player;
         }
@@ -115,6 +117,7 @@ class Matchmaker {
           backlog.Item2 = null;
         }
       }
+      Console.WriteLine("matchmaking versus pass 2");
       foreach ((Player, Player) pair in pairs) {
         Player p1 = pair.Item1;
         Player p2 = pair.Item2;
@@ -129,11 +132,7 @@ class Matchmaker {
         p1.upAgainst = p2;
         p2.upAgainst = p1;
         p1.SendResponse(S2CTypes.MatchFound, r1);
-        Task.Run(async () =>
-        {
-          await Task.Delay(500);
-          p1.SendResponse(S2CTypes.RequestSeed);
-        });
+        p1.SendResponse(S2CTypes.RequestSeed);
         p2.SendResponse(S2CTypes.MatchFound, r2);
       }
     }

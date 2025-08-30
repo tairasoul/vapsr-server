@@ -15,11 +15,17 @@ public class Server {
   private TcpSharpSocketServer server;
   private Matchmaker matchmaker;
   private Rooms rooms;
-  private static byte KEEPALIVE = Convert.ToByte(0x91054);
+  private static byte KEEPALIVE = Convert.ToByte(0x91);
   internal static bool debug;
   Dictionary<C2STypes, MethodInfo> info = [];
   public Server(int port, bool debug) {
-    server = new(port);
+    server = new(port)
+    {
+      KeepAlive = true,
+      KeepAliveTime = 10,
+      KeepAliveInterval = 1,
+      KeepAliveRetryCount = 5
+    };
     Server.debug = debug;
     matchmaker = new();
     rooms = new();
@@ -37,40 +43,9 @@ public class Server {
       plr.SendResponse(S2CTypes.OpponentForfeit, new PlayerResultCommon() { playerName = player.name });
   }
 
-  private async Task KeepAliveOps() {
-    while (true) {
-      await Task.Delay(500);
-      Player[] players = [.. matchmaker.pool.lobby, ..matchmaker.pool.matchmaking, ..matchmaker.pool.busy];
-      foreach (Player player in players) {
-        if (debug)
-          Console.WriteLine($"Sending KeepAlive to {player.name ?? player.UUID}");
-        player.client.SendBytes([Server.KEEPALIVE]);
-      }
-      await Task.Delay(500);
-      foreach (Player player in players) {
-        long lastResponseTime = player.lastResponseTime;
-        if (DateTimeOffset.UtcNow.ToUnixTimeSeconds() - lastResponseTime > 10)
-        {
-          Console.WriteLine($"Player {player.name} is likely disconnected (last response time is over 10 seconds ago). Disconnecting their socket connection.");
-          if (player.upAgainst != null) {
-            Console.WriteLine($"Telling {player.name}'s opponent they have forfeited.");
-            player.upAgainst.SendResponse(S2CTypes.OtherPlayerForfeit, new PlayerResultCommon() { playerName = player.name });
-            server.Disconnect(player.UUID);
-            return;
-          }
-          if (player.inRoom) 
-          {
-            Console.WriteLine($"Telling {player.name}'s opponents they have forfeited.");
-            RoomOpponentForfeit(player.room, player);
-            return;
-          }
-          server.Disconnect(player.UUID);
-          }
-      }
-    }
-  }
-
   private void GrabHandlers() {
+    Handlers.RoomInstance = rooms;
+    Handlers.MatchmakingInstance = matchmaker;
     Type[] types = Assembly.GetExecutingAssembly().GetTypes();
     foreach (Type type in types) {
 			MethodInfo[] methods = type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static);
@@ -94,7 +69,6 @@ public class Server {
   }
 
   public async Task Start() {
-    Task.Run(KeepAliveOps);
     server.OnConnected += (_, args) =>
     {
       Player player = new()
@@ -108,8 +82,8 @@ public class Server {
         UUID = args.ConnectionId,
         client = server.GetClient(args.ConnectionId)
       };
-      matchmaker.pool.newPlayer.Invoke(null, player);
-			if (debug)
+      matchmaker.pool.newPlayer.Invoke(this, player);
+      if (debug)
 				Console.WriteLine($"Player connected, uuid {args.ConnectionId}");
     };
 		
@@ -119,7 +93,7 @@ public class Server {
 			if (debug)
 				Console.WriteLine($"Player {player.name ?? player.UUID} disconnected");
       if (player != null)
-        matchmaker.pool.playerDisconnected.Invoke(null, player);
+        matchmaker.pool.playerDisconnected.Invoke(this, player);
     };
 
     server.OnDataReceived += (_, args) =>
@@ -127,9 +101,6 @@ public class Server {
       string uuid = args.ConnectionId;
       Player player = matchmaker.pool.GetPlayer(uuid);
       if (player == null) return;
-      player.lastResponseTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-      if (args.Data.SequenceEqual([KEEPALIVE]))
-        return;
 			if (debug)
 				Console.WriteLine($"Player {player.name ?? uuid} sent data");
       MessagePackSerializerOptions opts = MessagePackSerializerOptions.Standard.WithResolver(
@@ -137,9 +108,52 @@ public class Server {
           [new ClientRequestFormatter(), new ServerResponseFormatter()],
           [MessagePack.Resolvers.StandardResolver.Instance]
         )
-      );
+      ).WithCompression(MessagePackCompression.Lz4Block);
       ClientRequest dataS = MessagePackSerializer.Deserialize<ClientRequest>(args.Data, opts);
+      if (debug)
+        Console.WriteLine($"Received C2S packet of type {dataS.type}");
       HandleData(player, dataS);
     };
+
+    server.OnError += (_, args) =>
+    {
+			Console.Error.WriteLine(args.Exception.Source);
+			Console.Error.WriteLine(args.Exception.Message);
+			Console.Error.WriteLine(args.Exception.StackTrace);
+      if (args.Exception.InnerException != null) {
+        Console.Error.WriteLine(args.Exception.InnerException.Source);
+        Console.Error.WriteLine(args.Exception.InnerException.Message);
+        Console.Error.WriteLine(args.Exception.InnerException.StackTrace);
+      }
+    };
+
+    server.OnDisconnected += (_, args) =>
+    {
+      string uuid = args.ConnectionId;
+      Player player = matchmaker.pool.GetPlayer(uuid);
+      if (player != null) {
+        matchmaker.pool.playerDisconnected.Invoke(this, player);
+        if (player.upAgainst != null) {
+          Player u = player.upAgainst;
+          u.SendResponse(S2CTypes.OtherPlayerForfeit, new PlayerResultCommon() { playerName = player.name });
+        }
+        else if (player.inRoom) {
+          PrivateRoom room = player.room;
+          if (room.host == player) {
+            Handlers.HostLeft(room);
+          }
+          else {
+            room.connected = [.. room.connected.Where((v) => v.UUID != player.UUID)];
+            Handlers.UpdateRoomData(room);
+          }
+          Player[] players = [room.host, .. room.connected];
+          foreach (Player plr in players)
+            plr.SendResponse(S2CTypes.OpponentForfeit, new PlayerResultCommon() { playerName = player.name });
+        }
+      }
+    };
+
+    server.StartListening();
+    await Task.Delay(Timeout.Infinite);
   }
 }

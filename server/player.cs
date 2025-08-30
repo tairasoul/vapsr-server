@@ -34,6 +34,8 @@ public class Player {
 
   public void SendResponse(S2CTypes messageType, object? data) 
   {
+    if (Server.Server.debug)
+      Console.WriteLine($"Sending S2C packet of type {messageType}");
     client.SendBytes(new ServerResponse() { type = messageType, data = data }.Bytes());
   }
 }

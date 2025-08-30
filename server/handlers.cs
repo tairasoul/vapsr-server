@@ -122,7 +122,7 @@ static class Handlers {
 		return connectedNames;
 	}
 	
-	private static void UpdateRoomData(PrivateRoom room) 
+	internal static void UpdateRoomData(PrivateRoom room) 
 	{
 		RoomReplicationDataS2C replicationData = new() 
 		{
